@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
 import { auth, db } from '../src/lib/firebase'; 
-// IMPORTA AS FUNÇÕES MODULARES (V9)
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { INITIAL_USERS } from '../constants';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -19,61 +19,111 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // CORREÇÃO 1: onAuthStateChanged(auth, callback)
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
+    // Check for mock session first
+    const mockSession = localStorage.getItem('pwork_mock_user');
+    if (mockSession) {
         try {
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-
-          if (userDoc.exists()) {
-            setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
-          } else {
-            const newUserProfile: any = {
-                id: firebaseUser.uid,
-                username: firebaseUser.email?.split('@')[0] || 'user',
-                email: firebaseUser.email || '',
-                name: firebaseUser.displayName || 'Novo Usuário',
-                role: 'USER', 
-                avatar: `https://ui-avatars.com/api/?name=${firebaseUser.email}&background=random`,
-                memberSince: new Date().toLocaleDateString(),
-                permissions: []
-            };
-            await setDoc(userDocRef, newUserProfile);
-            setCurrentUser(newUserProfile as User);
-          }
-        } catch (error) {
-          console.error("Auth Error:", error);
-          setCurrentUser(null);
+            setCurrentUser(JSON.parse(mockSession));
+            setIsLoading(false);
+            return;
+        } catch(e) {
+            localStorage.removeItem('pwork_mock_user');
         }
-      } else {
-        setCurrentUser(null);
-      }
-      setIsLoading(false);
-    });
+    }
 
+    // SINTAXE MODULAR: Passamos 'auth' como parâmetro
+    let unsubscribe = () => {};
+    try {
+        unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+            try {
+            const userDocRef = doc(db, 'users', firebaseUser.uid);
+            const userDoc = await getDoc(userDocRef);
+
+            if (userDoc.exists()) {
+                setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
+            } else {
+                const newUserProfile: any = {
+                    id: firebaseUser.uid,
+                    username: firebaseUser.email?.split('@')[0] || 'user',
+                    email: firebaseUser.email || '',
+                    name: firebaseUser.displayName || 'Novo Usuário',
+                    role: 'USER', 
+                    avatar: `https://ui-avatars.com/api/?name=${firebaseUser.email}&background=random`,
+                    memberSince: new Date().toLocaleDateString(),
+                    permissions: []
+                };
+                // Try saving, if fails (due to perms or key), just set state
+                try { await setDoc(userDocRef, newUserProfile); } catch(e) {}
+                setCurrentUser(newUserProfile as User);
+            }
+            } catch (error) {
+            console.error("Erro ao carregar perfil:", error);
+            // If we have a firebase user but cant load profile, create a temp one
+            setCurrentUser({
+                id: firebaseUser.uid,
+                username: 'temp',
+                email: firebaseUser.email || '',
+                name: 'Temp User',
+                role: 'USER',
+                avatar: '',
+                memberSince: '',
+                permissions: []
+            } as User);
+            }
+        } else {
+            // Only clear if no mock session
+            if (!localStorage.getItem('pwork_mock_user')) {
+                setCurrentUser(null);
+            }
+        }
+        setIsLoading(false);
+        }, (error) => {
+            console.warn("Auth Listener Error (Demo Mode):", error);
+            setIsLoading(false);
+        });
+    } catch (e) {
+        console.error("Auth Init Error:", e);
+        setIsLoading(false);
+    }
     return () => unsubscribe();
   }, []);
 
   const login = async (identifier: string, password?: string): Promise<boolean> => {
+    if (!password) return false;
+
+    // 1. Try Firebase
     try {
-      if (!password) return false;
-      // CORREÇÃO 2: signInWithEmailAndPassword(auth, email, senha)
       await signInWithEmailAndPassword(auth, identifier, password);
+      localStorage.removeItem('pwork_mock_user');
       return true;
-    } catch (error) {
-      console.error("Login Error:", error);
+    } catch (error: any) {
+      console.warn("Firebase Login Failed:", error.code);
+      
+      // 2. Fallback to Mock Data
+      const mockUser = INITIAL_USERS.find(u => 
+        (u.username === identifier || u.email === identifier) && 
+        u.password === password
+      );
+
+      if (mockUser) {
+          console.info("Logging in with Mock User");
+          setCurrentUser(mockUser);
+          localStorage.setItem('pwork_mock_user', JSON.stringify(mockUser));
+          return true;
+      }
+      
       return false;
     }
   };
 
   const logout = async () => {
     try {
-      // CORREÇÃO 3: signOut(auth)
       await signOut(auth);
-      localStorage.removeItem('pwork_user');
-      setCurrentUser(null);
     } catch (error) { console.error(error); }
+    localStorage.removeItem('pwork_mock_user');
+    localStorage.removeItem('pwork_user'); // Cleanup legacy
+    setCurrentUser(null);
   };
 
   return (
