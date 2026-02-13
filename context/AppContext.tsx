@@ -1,9 +1,8 @@
-
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { AppConfig, User, Project, Ticket, BoardColumn, BoardGroup, AutomationRule } from '../types';
 import { DEFAULT_CONFIG } from '../constants';
 import { db, firebaseConfig } from '../src/lib/firebase'; 
-// Modular Imports
+// SINTAXE MODULAR SIMPLES (V9)
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, updateDoc, addDoc, deleteDoc, setDoc } from 'firebase/firestore';
@@ -54,58 +53,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     if (!currentUser) return;
 
-    // Listeners using Modular Syntax
-    const unsubConfig = onSnapshot(doc(db, 'system', 'config'), 
-      (s) => {
+    const unsubConfig = onSnapshot(doc(db, 'system', 'config'), (s) => {
         if (s.exists()) setConfig(s.data() as AppConfig);
         else setDoc(doc(db, 'system', 'config'), DEFAULT_CONFIG).catch(console.error);
-      },
-      (error) => console.error("Error reading config:", error)
-    );
-
-    const unsubUsers = onSnapshot(collection(db, 'users'), 
-      (s) => setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as User))),
-      (error) => console.error("Error reading users:", error)
-    );
-
-    const unsubProjects = onSnapshot(collection(db, 'projects'), 
-      (s) => {
+    });
+    const unsubUsers = onSnapshot(collection(db, 'users'), (s) => setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as User))));
+    const unsubProjects = onSnapshot(collection(db, 'projects'), (s) => {
         const list = s.docs.map(d => ({ id: d.id, ...d.data() } as Project));
         setProjects(list);
         setActiveProjectId(prev => list.find(p => p.id === prev) ? prev : (list.find(p => !p.archived)?.id || ''));
-      },
-      (error) => console.error("Error reading projects:", error)
-    );
-    
+    });
     return () => { unsubConfig(); unsubUsers(); unsubProjects(); };
   }, [currentUser]);
 
-  const updateConfig = async (n: Partial<AppConfig>) => { 
-    try { await updateDoc(doc(db, 'system', 'config'), n); } catch(e) { console.error("Update config error:", e); }
-  };
+  const updateConfig = async (n: Partial<AppConfig>) => { await updateDoc(doc(db, 'system', 'config'), n); };
 
   const addUser = async (userData: Omit<User, 'id'>) => {
     let secApp;
     try {
-        // Modular initialization for secondary app
         secApp = initializeApp(firebaseConfig, "Secondary");
         const secAuth = getAuth(secApp);
-        
         const cred = await createUserWithEmailAndPassword(secAuth, userData.email, userData.password || "mudar123");
-        
         if (cred.user) {
             await setDoc(doc(db, 'users', cred.user.uid), {
                 ...userData, id: cred.user.uid, role: userData.role || 'USER',
                 createdAt: new Date().toISOString(), memberSince: new Date().toLocaleDateString(), permissions: []
             });
         }
-        
         await signOut(secAuth);
         await deleteApp(secApp);
-
     } catch (e: any) {
-        console.error("Erro ao criar usuário:", e);
-        if(secApp) await deleteApp(secApp).catch(console.error);
+        console.error(e);
+        if(secApp) await deleteApp(secApp);
         alert("Erro ao criar usuário: " + e.message);
     }
   };
@@ -113,7 +92,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateUser = async (id: string, data: Partial<User>) => updateDoc(doc(db, 'users', id), data);
   const deleteUser = async (id: string) => deleteDoc(doc(db, 'users', id));
 
-  // CRUD Functions (Modular)
+  // Funções CRUD (Modular)
   const addProject = async (title: string) => {
     const newP: any = { title, description: 'Novo', archived: false, items: [], members: [], automations: [], columns: [{ id: 'c1', title: 'Status', type: 'status', options: [{id:'1', label:'A Fazer', color:'#ccc'}] }], groups: [{ id: 'g1', title: 'Geral', color: '#3b82f6' }] };
     const ref = await addDoc(collection(db, 'projects'), newP);

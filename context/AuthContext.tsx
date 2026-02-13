@@ -1,7 +1,7 @@
-
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
 import { auth, db } from '../src/lib/firebase'; 
+// IMPORTA AS FUNÇÕES MODULARES (V9)
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -19,7 +19,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Modular Syntax: Pass auth instance as first argument
+    // CORREÇÃO 1: onAuthStateChanged(auth, callback)
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
@@ -29,7 +29,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (userDoc.exists()) {
             setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
           } else {
-            // Create default profile if not exists
             const newUserProfile: any = {
                 id: firebaseUser.uid,
                 username: firebaseUser.email?.split('@')[0] || 'user',
@@ -59,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (identifier: string, password?: string): Promise<boolean> => {
     try {
       if (!password) return false;
-      // Modular Syntax
+      // CORREÇÃO 2: signInWithEmailAndPassword(auth, email, senha)
       await signInWithEmailAndPassword(auth, identifier, password);
       return true;
     } catch (error) {
@@ -70,7 +69,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
-      // Modular Syntax
+      // CORREÇÃO 3: signOut(auth)
       await signOut(auth);
       localStorage.removeItem('pwork_user');
       setCurrentUser(null);
