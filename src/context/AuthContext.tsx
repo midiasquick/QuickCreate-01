@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
+// CORREÇÃO DO CAMINHO: '../lib/firebase' em vez de '../src/lib/firebase'
 import { auth, db } from '../lib/firebase'; 
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface AuthContextType {
@@ -17,7 +19,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -54,7 +56,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (identifier: string, password?: string): Promise<boolean> => {
     try {
       if (!password) return false;
-      await auth.signInWithEmailAndPassword(identifier, password);
+      await signInWithEmailAndPassword(auth, identifier, password);
       return true;
     } catch (error) {
       console.error("Login Error:", error);
@@ -64,7 +66,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
-      await auth.signOut();
+      await signOut(auth);
       localStorage.removeItem('pwork_user');
       setCurrentUser(null);
     } catch (error) { console.error(error); }

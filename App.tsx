@@ -180,9 +180,11 @@ const AppContent: React.FC = () => {
   );
 };
 
+// ... (mantenha os imports e o componente AppContent iguais até o final)
+
 const App: React.FC = () => {
   return (
-    // CORREÇÃO: AuthProvider POR FORA do AppProvider
+    // MUDANÇA AQUI: AuthProvider fica por fora!
     <AuthProvider>
       <AppProvider>
         <AppContent />

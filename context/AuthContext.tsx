@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
-// Importando do local correto
-import { auth, db } from '../src/lib/firebase'; 
+import { auth, db } from '../src/lib/firebase'; // Importa do arquivo que corrigimos acima
+import * as firebaseAuth from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface AuthContextType {
@@ -18,7 +18,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+    // SINTAXE NOVA: Passamos 'auth' como parâmetro
+    const unsubscribe = firebaseAuth.onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -27,6 +28,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (userDoc.exists()) {
             setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
           } else {
+            // Fallback para criar usuário se não existir
             const newUserProfile: any = {
                 id: firebaseUser.uid,
                 username: firebaseUser.email?.split('@')[0] || 'user',
@@ -49,24 +51,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       setIsLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
   const login = async (identifier: string, password?: string): Promise<boolean> => {
     try {
       if (!password) return false;
-      await auth.signInWithEmailAndPassword(identifier, password);
+      // SINTAXE NOVA: signInWithEmailAndPassword(auth, ...)
+      await firebaseAuth.signInWithEmailAndPassword(auth, identifier, password);
       return true;
     } catch (error) {
-      console.error("Erro Login:", error);
+      console.error("Login Error:", error);
       return false;
     }
   };
 
   const logout = async () => {
     try {
-      await auth.signOut();
+      await firebaseAuth.signOut(auth);
       localStorage.removeItem('pwork_user');
       setCurrentUser(null);
     } catch (error) { console.error(error); }
