@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { AppConfig, User, Project, Ticket, BoardColumn, BoardGroup, AutomationRule } from '../types';
 import { DEFAULT_CONFIG } from '../constants';
-// Importando do local correto
 import { db, firebaseConfig } from '../src/lib/firebase'; 
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import { collection, doc, onSnapshot, updateDoc, addDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { useAuth } from './AuthContext'; // IMPORTANTE: Importar o contexto de Auth
 
 interface AppContextType {
   config: AppConfig;
@@ -41,6 +41,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { currentUser } = useAuth(); // PEGAR O USUÁRIO
+  
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -48,6 +50,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const tickets = projects.flatMap(p => p.items);
 
   useEffect(() => {
+    // SE NÃO ESTIVER LOGADO, PARE AQUI! (Evita o erro permission-denied)
+    if (!currentUser) return;
+
     const unsubConfig = onSnapshot(doc(db, 'system', 'config'), (s) => {
         if (s.exists()) setConfig(s.data() as AppConfig);
         else setDoc(doc(db, 'system', 'config'), DEFAULT_CONFIG);
@@ -59,16 +64,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setActiveProjectId(prev => list.find(p => p.id === prev) ? prev : (list.find(p => !p.archived)?.id || ''));
     });
     return () => { unsubConfig(); unsubUsers(); unsubProjects(); };
-  }, []);
+  }, [currentUser]); // Recarrega quando o usuário muda (login/logout)
 
   const updateConfig = async (n: Partial<AppConfig>) => { await updateDoc(doc(db, 'system', 'config'), n); };
 
   const addUser = async (userData: Omit<User, 'id'>) => {
     let secApp;
     try {
-        // Use compat initialization for secondary app
         secApp = firebase.initializeApp(firebaseConfig, "Secondary");
-        // Use compat auth
         const cred = await secApp.auth().createUserWithEmailAndPassword(userData.email, userData.password || "mudar123");
         if (cred.user) {
             await setDoc(doc(db, 'users', cred.user.uid), {
@@ -88,12 +91,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateUser = async (id: string, data: Partial<User>) => updateDoc(doc(db, 'users', id), data);
   const deleteUser = async (id: string) => deleteDoc(doc(db, 'users', id));
 
-  // Funções simplificadas para brevidade (mantendo funcionalidade V9)
-  const modProj = async (pid: string, fn: (p: Project) => Partial<Project>) => {
-      const p = projects.find(x => x.id === pid);
-      if(p) await updateDoc(doc(db, 'projects', pid), fn(p));
-  };
-
+  // Projetos
   const addProject = async (title: string) => {
     const newP: any = { title, description: 'Novo', archived: false, items: [], members: [], automations: [], columns: [{ id: 'c1', title: 'Status', type: 'status', options: [{id:'1', label:'A Fazer', color:'#ccc'}] }], groups: [{ id: 'g1', title: 'Geral', color: '#3b82f6' }] };
     const ref = await addDoc(collection(db, 'projects'), newP);
@@ -103,16 +101,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteProject = async (id: string) => deleteDoc(doc(db, 'projects', id));
   const archiveProject = async (id: string, archived: boolean) => updateProject(id, { archived });
 
+  // Helpers Colunas
+  const modProj = async (pid: string, fn: (p: Project) => Partial<Project>) => {
+      const p = projects.find(x => x.id === pid);
+      if(p) await updateDoc(doc(db, 'projects', pid), fn(p));
+  };
+
   const addColumn = (pid: string, c: BoardColumn) => modProj(pid, p => ({ columns: [...p.columns, c] }));
   const updateColumn = (pid: string, cid: string, d: Partial<BoardColumn>) => modProj(pid, p => ({ columns: p.columns.map(x => x.id === cid ? {...x, ...d} : x) }));
   const deleteColumn = (pid: string, cid: string) => modProj(pid, p => ({ columns: p.columns.filter(x => x.id !== cid) }));
+  
   const addGroup = (pid: string, g: BoardGroup) => modProj(pid, p => ({ groups: [...p.groups, {...g, color: '#888'}] }));
   const updateGroup = (pid: string, gid: string, d: Partial<BoardGroup>) => modProj(pid, p => ({ groups: p.groups.map(x => x.id === gid ? {...x, ...d} : x) }));
   const deleteGroup = (pid: string, gid: string) => modProj(pid, p => ({ groups: p.groups.filter(x => x.id !== gid) }));
   const archiveGroup = (pid: string, gid: string, a: boolean) => updateGroup(pid, gid, { archived: a });
+
   const addAutomation = (pid: string, r: AutomationRule) => modProj(pid, p => ({ automations: [...(p.automations||[]), r] }));
   const deleteAutomation = (pid: string, rid: string) => modProj(pid, p => ({ automations: (p.automations||[]).filter(r => r.id !== rid) }));
 
+  // Itens
   const addItem = (title: string, groupId: string, init: any = {}) => {
       const p = projects.find(x => x.id === activeProjectId);
       if(!p) return;

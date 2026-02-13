@@ -33,12 +33,11 @@ const AppContent: React.FC = () => {
     window.location.hash = `/${id}`;
   };
 
-  // Show nothing or a loader while checking localStorage
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-400">Carregando...</div>;
   }
 
-  // Strict Authentication Guard
+  // Se não estiver logado, mostra Login e nem carrega o resto do App
   if (!currentUser) {
     return <Login />;
   }
@@ -93,7 +92,6 @@ const AppContent: React.FC = () => {
         }
 
         if (!hasAccess) {
-            // Redirect if unauthorized
             setTimeout(() => window.location.hash = '/dashboard', 0);
             return <Dashboard />;
         }
@@ -148,7 +146,6 @@ const AppContent: React.FC = () => {
          </button>
       </div>
 
-      {/* Mobile Backdrop */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-slate-900/50 z-20 md:hidden backdrop-blur-sm transition-opacity"
@@ -185,11 +182,12 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <AppProvider>
-      <AuthProvider>
+    // CORREÇÃO: AuthProvider POR FORA do AppProvider
+    <AuthProvider>
+      <AppProvider>
         <AppContent />
-      </AuthProvider>
-    </AppProvider>
+      </AppProvider>
+    </AuthProvider>
   );
 };
 
