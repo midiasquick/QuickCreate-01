@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { AppConfig, User, Project, Ticket, BoardColumn, BoardGroup, AutomationRule } from '../types';
 import { DEFAULT_CONFIG } from '../constants';
+// Importa do local correto e usa apenas funcoes Modulares
 import { db, firebaseConfig } from '../src/lib/firebase'; 
-// Apenas imports MODULARES (V9)
-import * as firebaseApp from 'firebase/app';
-import * as firebaseAuth from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, updateDoc, addDoc, deleteDoc, setDoc } from 'firebase/firestore';
-import { useAuth } from './AuthContext';
+import { useAuth } from './AuthContext'; // Importar Auth
 
 interface AppContextType {
   config: AppConfig;
@@ -42,7 +42,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { currentUser } = useAuth();
+  const { currentUser } = useAuth(); // Pega o usuário
   
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [users, setUsers] = useState<User[]>([]);
@@ -51,8 +51,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const tickets = projects.flatMap(p => p.items);
 
   useEffect(() => {
-    // AQUI ESTÁ A CORREÇÃO PRINCIPAL:
-    // Se não tem usuário logado, NÃO tente ler o banco.
+    // TRAVA DE SEGURANÇA: Só tenta ler se tiver usuário logado
     if (!currentUser) return;
 
     const unsubConfig = onSnapshot(doc(db, 'system', 'config'), (s) => {
@@ -73,20 +72,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addUser = async (userData: Omit<User, 'id'>) => {
     let secApp;
     try {
-        secApp = firebaseApp.initializeApp(firebaseConfig, "Secondary");
-        const secAuth = firebaseAuth.getAuth(secApp);
-        const cred = await firebaseAuth.createUserWithEmailAndPassword(secAuth, userData.email, userData.password || "mudar123");
+        secApp = initializeApp(firebaseConfig, "Secondary");
+        const secAuth = getAuth(secApp);
+        const cred = await createUserWithEmailAndPassword(secAuth, userData.email, userData.password || "mudar123");
         if (cred.user) {
             await setDoc(doc(db, 'users', cred.user.uid), {
                 ...userData, id: cred.user.uid, role: userData.role || 'USER',
                 createdAt: new Date().toISOString(), memberSince: new Date().toLocaleDateString(), permissions: []
             });
         }
-        await firebaseAuth.signOut(secAuth);
-        await firebaseApp.deleteApp(secApp);
+        await signOut(secAuth);
+        await deleteApp(secApp);
     } catch (e: any) {
         console.error(e);
-        if(secApp) await firebaseApp.deleteApp(secApp);
+        if(secApp) await deleteApp(secApp);
         alert("Erro ao criar usuário: " + e.message);
     }
   };
@@ -94,7 +93,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateUser = async (id: string, data: Partial<User>) => updateDoc(doc(db, 'users', id), data);
   const deleteUser = async (id: string) => deleteDoc(doc(db, 'users', id));
 
-  // Funções CRUD (Mantidas, apenas garantindo uso do `db` modular)
+  // Funções CRUD
   const addProject = async (title: string) => {
     const newP: any = { title, description: 'Novo', archived: false, items: [], members: [], automations: [], columns: [{ id: 'c1', title: 'Status', type: 'status', options: [{id:'1', label:'A Fazer', color:'#ccc'}] }], groups: [{ id: 'g1', title: 'Geral', color: '#3b82f6' }] };
     const ref = await addDoc(collection(db, 'projects'), newP);
