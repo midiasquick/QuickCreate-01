@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
-import { useApp } from './AppContext';
+// Importando do local correto
+import { auth, db } from '../src/lib/firebase'; 
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   currentUser: User | null;
-  login: (identifier: string, password?: string) => boolean;
-  logout: () => void;
+  login: (identifier: string, password?: string) => Promise<boolean>;
+  logout: () => Promise<void>;
   isLoading: boolean;
 }
 
@@ -14,49 +16,60 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { users } = useApp();
 
-  // Load user from localStorage on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('pwork_user');
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        // Verify if user still exists in the system (e.g. hasn't been deleted)
-        const validUser = users.find(u => u.id === parsedUser.id);
-        if (validUser) {
-          setCurrentUser(validUser);
-        } else {
-          localStorage.removeItem('pwork_user');
-        }
-      } catch (e) {
-        localStorage.removeItem('pwork_user');
-      }
-    }
-    setIsLoading(false);
-  }, [users]);
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
 
-  const login = (identifier: string, password?: string) => {
-    // Check against both username and email, and verify password
-    const user = users.find((u) => {
-        const isIdMatch = u.username.toLowerCase() === identifier.toLowerCase() || u.email.toLowerCase() === identifier.toLowerCase();
-        // If password is provided in user record, check it. Otherwise allow for legacy/dev
-        const isPassMatch = u.password ? u.password === password : true;
-        
-        return isIdMatch && isPassMatch;
+          if (userDoc.exists()) {
+            setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
+          } else {
+            const newUserProfile: any = {
+                id: firebaseUser.uid,
+                username: firebaseUser.email?.split('@')[0] || 'user',
+                email: firebaseUser.email || '',
+                name: firebaseUser.displayName || 'Novo Usuário',
+                role: 'USER', 
+                avatar: `https://ui-avatars.com/api/?name=${firebaseUser.email}&background=random`,
+                memberSince: new Date().toLocaleDateString(),
+                permissions: []
+            };
+            await setDoc(userDocRef, newUserProfile);
+            setCurrentUser(newUserProfile as User);
+          }
+        } catch (error) {
+          console.error("Erro Auth:", error);
+          setCurrentUser(null);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+      setIsLoading(false);
     });
 
-    if (user) {
-      setCurrentUser(user);
-      localStorage.setItem('pwork_user', JSON.stringify(user));
+    return () => unsubscribe();
+  }, []);
+
+  const login = async (identifier: string, password?: string): Promise<boolean> => {
+    try {
+      if (!password) return false;
+      await auth.signInWithEmailAndPassword(identifier, password);
       return true;
+    } catch (error) {
+      console.error("Erro Login:", error);
+      return false;
     }
-    return false;
   };
 
-  const logout = () => {
-    localStorage.removeItem('pwork_user');
-    setCurrentUser(null);
+  const logout = async () => {
+    try {
+      await auth.signOut();
+      localStorage.removeItem('pwork_user');
+      setCurrentUser(null);
+    } catch (error) { console.error(error); }
   };
 
   return (
