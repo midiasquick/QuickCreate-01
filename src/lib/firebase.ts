@@ -1,6 +1,6 @@
-import firebase from "firebase/compat/app";
-import "firebase/compat/auth";
-import "firebase/compat/firestore";
+import firebase from 'firebase/app';
+import 'firebase/auth';
+import 'firebase/firestore';
 
 export const firebaseConfig = {
   apiKey: "AIzaSyC4UjR8BgBSWcc77zrEXGCMN69aGZp7_3o",
@@ -11,13 +11,13 @@ export const firebaseConfig = {
   appId: "1:902447780168:web:2fd6a7ff4887ad1dade37d"
 };
 
-// Initialize Firebase (Singleton check for v8/compat)
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-const app = firebase.app();
+// Inicializa o app apenas se não houver instâncias
+const app = !firebase.apps.length 
+  ? firebase.initializeApp(firebaseConfig) 
+  : firebase.app();
 
-export const auth = firebase.auth();
-export const db = firebase.firestore();
+// Exporta instâncias do namespace compat
+export const auth = app.auth();
+export const db = app.firestore();
 
 export default app;

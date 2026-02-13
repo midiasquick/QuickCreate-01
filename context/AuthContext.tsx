@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
-// IMPORTANTE: Apontando para a pasta src/lib
 import { auth, db } from '../src/lib/firebase'; 
+import firebase from 'firebase/app';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -20,12 +20,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const userDocRef = db.collection('users').doc(firebaseUser.uid);
-          const userDoc = await userDocRef.get();
+          const userDoc = await db.collection('users').doc(firebaseUser.uid).get();
 
           if (userDoc.exists) {
             setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
           } else {
+            // Cria perfil se não existir
             const newUserProfile: any = {
                 id: firebaseUser.uid,
                 username: firebaseUser.email?.split('@')[0] || 'user',
@@ -36,11 +36,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 memberSince: new Date().toLocaleDateString(),
                 permissions: []
             };
-            await userDocRef.set(newUserProfile);
+            await db.collection('users').doc(firebaseUser.uid).set(newUserProfile);
             setCurrentUser(newUserProfile as User);
           }
         } catch (error) {
-          console.error("Auth Error:", error);
+          console.error("Erro no AuthContext:", error);
           setCurrentUser(null);
         }
       } else {
@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await auth.signInWithEmailAndPassword(identifier, password);
       return true;
     } catch (error) {
-      console.error("Login Error:", error);
+      console.error("Erro Login:", error);
       return false;
     }
   };
