@@ -1,6 +1,9 @@
+
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../../types';
 import { auth, db } from '../lib/firebase'; 
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -16,15 +19,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+    // Modular Syntax: Pass auth instance as first argument
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const userDoc = await db.collection('users').doc(firebaseUser.uid).get();
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
 
-          if (userDoc.exists) {
+          if (userDoc.exists()) {
             setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
           } else {
-            // Cria perfil se não existir
+            // Create default profile if not exists
             const newUserProfile: any = {
                 id: firebaseUser.uid,
                 username: firebaseUser.email?.split('@')[0] || 'user',
@@ -35,11 +40,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 memberSince: new Date().toLocaleDateString(),
                 permissions: []
             };
-            await db.collection('users').doc(firebaseUser.uid).set(newUserProfile);
+            await setDoc(userDocRef, newUserProfile);
             setCurrentUser(newUserProfile as User);
           }
         } catch (error) {
-          console.error("Erro no AuthContext:", error);
+          console.error("Auth Error:", error);
           setCurrentUser(null);
         }
       } else {
@@ -54,17 +59,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (identifier: string, password?: string): Promise<boolean> => {
     try {
       if (!password) return false;
-      await auth.signInWithEmailAndPassword(identifier, password);
+      // Modular Syntax
+      await signInWithEmailAndPassword(auth, identifier, password);
       return true;
     } catch (error) {
-      console.error("Erro Login:", error);
+      console.error("Login Error:", error);
       return false;
     }
   };
 
   const logout = async () => {
     try {
-      await auth.signOut();
+      // Modular Syntax
+      await signOut(auth);
       localStorage.removeItem('pwork_user');
       setCurrentUser(null);
     } catch (error) { console.error(error); }

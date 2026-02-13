@@ -1,10 +1,12 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { AppConfig, User, Project, Ticket, BoardColumn, BoardGroup, AutomationRule } from '../types';
-import { DEFAULT_CONFIG } from '../constants';
-import { db, firebaseConfig } from '../lib/firebase'; 
-import firebase from 'firebase/app';
-import 'firebase/auth';
 
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { AppConfig, User, Project, Ticket, BoardColumn, BoardGroup, AutomationRule } from '../../types';
+import { DEFAULT_CONFIG } from '../../constants';
+import { db, firebaseConfig } from '../lib/firebase'; 
+// Modular Imports
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { collection, doc, onSnapshot, updateDoc, addDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 
 interface AppContextType {
@@ -49,79 +51,76 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [activeProjectId, setActiveProjectId] = useState<string>('');
   const tickets = projects.flatMap(p => p.items);
 
-  // --- LISTENERS DE DADOS (v8) ---
   useEffect(() => {
     if (!currentUser) return;
 
-    // Config
-    const unsubConfig = db.collection('system').doc('config').onSnapshot(
+    // Listeners using Modular Syntax
+    const unsubConfig = onSnapshot(doc(db, 'system', 'config'), 
       (s) => {
-        if (s.exists) setConfig(s.data() as AppConfig);
-        else db.collection('system').doc('config').set(DEFAULT_CONFIG).catch(console.error);
+        if (s.exists()) setConfig(s.data() as AppConfig);
+        else setDoc(doc(db, 'system', 'config'), DEFAULT_CONFIG).catch(console.error);
       },
-      (error) => console.error("Erro ao carregar configs:", error)
+      (error) => console.error("Error reading config:", error)
     );
 
-    // Users
-    const unsubUsers = db.collection('users').onSnapshot(
+    const unsubUsers = onSnapshot(collection(db, 'users'), 
       (s) => setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as User))),
-      (error) => console.error("Erro ao carregar usuários:", error)
+      (error) => console.error("Error reading users:", error)
     );
 
-    // Projects
-    const unsubProjects = db.collection('projects').onSnapshot(
+    const unsubProjects = onSnapshot(collection(db, 'projects'), 
       (s) => {
         const list = s.docs.map(d => ({ id: d.id, ...d.data() } as Project));
         setProjects(list);
         setActiveProjectId(prev => list.find(p => p.id === prev) ? prev : (list.find(p => !p.archived)?.id || ''));
       },
-      (error) => console.error("Erro ao carregar projetos:", error)
+      (error) => console.error("Error reading projects:", error)
     );
-
+    
     return () => { unsubConfig(); unsubUsers(); unsubProjects(); };
   }, [currentUser]);
 
   const updateConfig = async (n: Partial<AppConfig>) => { 
-    try { await db.collection('system').doc('config').update(n); } catch(e) { console.error(e); } 
+    try { await updateDoc(doc(db, 'system', 'config'), n); } catch(e) { console.error("Update config error:", e); }
   };
 
   const addUser = async (userData: Omit<User, 'id'>) => {
     let secApp;
     try {
-        // Inicializa app secundário para criar usuário sem deslogar o admin (v8)
-        secApp = firebase.initializeApp(firebaseConfig, "Secondary");
-        const secAuth = secApp.auth();
+        // Modular initialization for secondary app
+        secApp = initializeApp(firebaseConfig, "Secondary");
+        const secAuth = getAuth(secApp);
         
-        const cred = await secAuth.createUserWithEmailAndPassword(userData.email, userData.password || "mudar123");
+        const cred = await createUserWithEmailAndPassword(secAuth, userData.email, userData.password || "mudar123");
         
         if (cred.user) {
-            await db.collection('users').doc(cred.user.uid).set({
+            await setDoc(doc(db, 'users', cred.user.uid), {
                 ...userData, id: cred.user.uid, role: userData.role || 'USER',
                 createdAt: new Date().toISOString(), memberSince: new Date().toLocaleDateString(), permissions: []
             });
         }
         
-        await secAuth.signOut();
-        await secApp.delete();
+        await signOut(secAuth);
+        await deleteApp(secApp);
 
     } catch (e: any) {
         console.error("Erro ao criar usuário:", e);
-        if(secApp) await secApp.delete().catch(console.error);
+        if(secApp) await deleteApp(secApp).catch(console.error);
         alert("Erro ao criar usuário: " + e.message);
     }
   };
 
-  const updateUser = async (id: string, data: Partial<User>) => db.collection('users').doc(id).update(data);
-  const deleteUser = async (id: string) => db.collection('users').doc(id).delete();
+  const updateUser = async (id: string, data: Partial<User>) => updateDoc(doc(db, 'users', id), data);
+  const deleteUser = async (id: string) => deleteDoc(doc(db, 'users', id));
 
-  // --- FUNÇÕES DE PROJETO ---
+  // CRUD Functions (Modular)
   const addProject = async (title: string) => {
     const newP: any = { title, description: 'Novo', archived: false, items: [], members: [], automations: [], columns: [{ id: 'c1', title: 'Status', type: 'status', options: [{id:'1', label:'A Fazer', color:'#ccc'}] }], groups: [{ id: 'g1', title: 'Geral', color: '#3b82f6' }] };
-    const ref = await db.collection('projects').add(newP);
+    const ref = await addDoc(collection(db, 'projects'), newP);
     setActiveProjectId(ref.id);
   };
-  const updateProject = async (id: string, data: Partial<Project>) => db.collection('projects').doc(id).update(data);
-  const deleteProject = async (id: string) => db.collection('projects').doc(id).delete();
+  const updateProject = async (id: string, data: Partial<Project>) => updateDoc(doc(db, 'projects', id), data);
+  const deleteProject = async (id: string) => deleteDoc(doc(db, 'projects', id));
   const archiveProject = async (id: string, archived: boolean) => updateProject(id, { archived });
 
   const modProj = async (pid: string, fn: (p: Project) => Partial<Project>) => {
