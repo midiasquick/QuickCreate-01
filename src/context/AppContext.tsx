@@ -1,10 +1,8 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { AppConfig, User, Project, Ticket, BoardColumn, BoardGroup, AutomationRule } from '../types';
 import { DEFAULT_CONFIG } from '../constants';
-// Importação correta da lib compartilhada
-import { db, firebaseConfig } from '../src/lib/firebase'; 
+import { db, firebaseConfig } from '../lib/firebase'; 
 import firebase from 'firebase/compat/app';
-import 'firebase/compat/auth';
 import { useAuth } from './AuthContext';
 
 interface AppContextType {
