@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User } from '../types';
 import { auth, db } from '../src/lib/firebase'; 
-import firebase from 'firebase/app';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -17,6 +16,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Uso da função V8 onAuthStateChanged
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         try {
@@ -25,7 +25,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (userDoc.exists) {
             setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
           } else {
-            // Cria perfil se não existir
+            // Cria perfil padrão se não existir
             const newUserProfile: any = {
                 id: firebaseUser.uid,
                 username: firebaseUser.email?.split('@')[0] || 'user',
@@ -40,7 +40,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setCurrentUser(newUserProfile as User);
           }
         } catch (error) {
-          console.error("Erro no AuthContext:", error);
+          console.error("Auth Error:", error);
           setCurrentUser(null);
         }
       } else {
@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await auth.signInWithEmailAndPassword(identifier, password);
       return true;
     } catch (error) {
-      console.error("Erro Login:", error);
+      console.error("Login Error:", error);
       return false;
     }
   };

@@ -11,13 +11,13 @@ export const firebaseConfig = {
   appId: "1:902447780168:web:2fd6a7ff4887ad1dade37d"
 };
 
-// Inicializa o app apenas se não houver instâncias
-const app = !firebase.apps.length 
-  ? firebase.initializeApp(firebaseConfig) 
-  : firebase.app();
+// Inicializa o app
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
-// Exporta instâncias do namespace compat
-export const auth = app.auth();
-export const db = app.firestore();
+// Exporta instâncias
+export const auth = firebase.auth();
+export const db = firebase.firestore();
 
-export default app;
+export default firebase;
