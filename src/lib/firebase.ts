@@ -11,13 +11,9 @@ export const firebaseConfig = {
   appId: "1:902447780168:web:2fd6a7ff4887ad1dade37d"
 };
 
-// Inicializa o app
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
+// Initialize Firebase (Check for existing apps to prevent re-initialization)
+const app = !firebase.apps.length ? firebase.initializeApp(firebaseConfig) : firebase.app();
 
-// Exporta instâncias
-export const auth = firebase.auth();
-export const db = firebase.firestore();
-
-export default firebase;
+// Export instances
+export const auth = app.auth();
+export const db = app.firestore();

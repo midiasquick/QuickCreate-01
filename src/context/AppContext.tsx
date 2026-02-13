@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { AppConfig, User, Project, Ticket, BoardColumn, BoardGroup, AutomationRule } from '../types';
 import { DEFAULT_CONFIG } from '../constants';
-import firebase, { db, firebaseConfig } from '../lib/firebase'; 
+import { db, firebaseConfig } from '../lib/firebase'; 
+import firebase from 'firebase/app';
+import 'firebase/auth';
+
 import { useAuth } from './AuthContext';
 
 interface AppContextType {
@@ -46,44 +49,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [activeProjectId, setActiveProjectId] = useState<string>('');
   const tickets = projects.flatMap(p => p.items);
 
-  // --- LISTENERS DE DADOS (V8 Syntax) ---
+  // --- LISTENERS DE DADOS (v8) ---
   useEffect(() => {
     if (!currentUser) return;
 
     // Config
     const unsubConfig = db.collection('system').doc('config').onSnapshot(
-        (s) => {
-            if (s.exists) setConfig(s.data() as AppConfig);
-            else db.collection('system').doc('config').set(DEFAULT_CONFIG).catch(console.error);
-        }, 
-        (error) => console.error("Erro ao carregar configs:", error)
+      (s) => {
+        if (s.exists) setConfig(s.data() as AppConfig);
+        else db.collection('system').doc('config').set(DEFAULT_CONFIG).catch(console.error);
+      },
+      (error) => console.error("Erro ao carregar configs:", error)
     );
 
     // Users
     const unsubUsers = db.collection('users').onSnapshot(
-        (s) => setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as User))),
-        (error) => console.error("Erro ao carregar usuários:", error)
+      (s) => setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as User))),
+      (error) => console.error("Erro ao carregar usuários:", error)
     );
 
     // Projects
     const unsubProjects = db.collection('projects').onSnapshot(
-        (s) => {
-            const list = s.docs.map(d => ({ id: d.id, ...d.data() } as Project));
-            setProjects(list);
-            setActiveProjectId(prev => list.find(p => p.id === prev) ? prev : (list.find(p => !p.archived)?.id || ''));
-        },
-        (error) => console.error("Erro ao carregar projetos:", error)
+      (s) => {
+        const list = s.docs.map(d => ({ id: d.id, ...d.data() } as Project));
+        setProjects(list);
+        setActiveProjectId(prev => list.find(p => p.id === prev) ? prev : (list.find(p => !p.archived)?.id || ''));
+      },
+      (error) => console.error("Erro ao carregar projetos:", error)
     );
 
     return () => { unsubConfig(); unsubUsers(); unsubProjects(); };
   }, [currentUser]);
 
-  const updateConfig = async (n: Partial<AppConfig>) => { await db.collection('system').doc('config').update(n); };
+  const updateConfig = async (n: Partial<AppConfig>) => { 
+    try { await db.collection('system').doc('config').update(n); } catch(e) { console.error(e); } 
+  };
 
   const addUser = async (userData: Omit<User, 'id'>) => {
     let secApp;
     try {
-        // Inicializa app secundário para criar usuário sem deslogar o admin (V8 Syntax)
+        // Inicializa app secundário para criar usuário sem deslogar o admin (v8)
         secApp = firebase.initializeApp(firebaseConfig, "Secondary");
         const secAuth = secApp.auth();
         
@@ -101,7 +106,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     } catch (e: any) {
         console.error("Erro ao criar usuário:", e);
-        if(secApp) await secApp.delete();
+        if(secApp) await secApp.delete().catch(console.error);
         alert("Erro ao criar usuário: " + e.message);
     }
   };

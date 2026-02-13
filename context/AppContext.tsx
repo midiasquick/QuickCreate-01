@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { AppConfig, User, Project, Ticket, BoardColumn, BoardGroup, AutomationRule } from '../types';
 import { DEFAULT_CONFIG } from '../constants';
-import firebase, { db, firebaseConfig } from '../src/lib/firebase'; 
-import { useAuth } from './AuthContext';
+import { db, firebaseConfig } from '../src/lib/firebase'; 
+import firebase from 'firebase/app';
+import 'firebase/auth';
+
+import { useAuth } from './AuthContext'; 
 
 interface AppContextType {
   config: AppConfig;
@@ -47,48 +50,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const tickets = projects.flatMap(p => p.items);
 
   useEffect(() => {
-    // 1. TRAVA DE SEGURANÇA: Só tenta ler se tiver usuário logado
     if (!currentUser) return;
 
-    // 2. LISTENERS MODULARES (V8 Syntax)
-    
-    // Config
-    const unsubConfig = db.collection('system').doc('config').onSnapshot(
-      (s) => {
+    const unsubConfig = db.collection('system').doc('config').onSnapshot((s) => {
         if (s.exists) setConfig(s.data() as AppConfig);
-        else db.collection('system').doc('config').set(DEFAULT_CONFIG).catch(e => console.warn("Erro init config:", e));
-      },
-      (error) => console.error("Erro permissão Config:", error.message)
-    );
-
-    // Users
-    const unsubUsers = db.collection('users').onSnapshot(
-      (s) => setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as User))),
-      (error) => console.error("Erro permissão Users:", error.message)
-    );
-
-    // Projects
-    const unsubProjects = db.collection('projects').onSnapshot(
-      (s) => {
+        else db.collection('system').doc('config').set(DEFAULT_CONFIG).catch(console.error);
+    });
+    const unsubUsers = db.collection('users').onSnapshot((s) => setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as User))));
+    const unsubProjects = db.collection('projects').onSnapshot((s) => {
         const list = s.docs.map(d => ({ id: d.id, ...d.data() } as Project));
         setProjects(list);
-        // Define o projeto ativo se não houver um, ou se o atual foi deletado
         setActiveProjectId(prev => list.find(p => p.id === prev) ? prev : (list.find(p => !p.archived)?.id || ''));
-      },
-      (error) => console.error("Erro permissão Projects:", error.message)
-    );
-    
+    });
     return () => { unsubConfig(); unsubUsers(); unsubProjects(); };
   }, [currentUser]);
 
-  const updateConfig = async (n: Partial<AppConfig>) => { try { await db.collection('system').doc('config').update(n); } catch(e) { console.error(e); } };
+  const updateConfig = async (n: Partial<AppConfig>) => { await db.collection('system').doc('config').update(n); };
 
   const addUser = async (userData: Omit<User, 'id'>) => {
     let secApp;
     try {
-        // Inicializa app secundária para não deslogar o admin atual (V8 Syntax)
         secApp = firebase.initializeApp(firebaseConfig, "Secondary");
         const secAuth = secApp.auth();
+        
         const cred = await secAuth.createUserWithEmailAndPassword(userData.email, userData.password || "mudar123");
         if (cred.user) {
             await db.collection('users').doc(cred.user.uid).set({

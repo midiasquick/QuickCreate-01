@@ -16,7 +16,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Uso da função V8 onAuthStateChanged
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
         try {
@@ -25,7 +24,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (userDoc.exists) {
             setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
           } else {
-            // Cria perfil padrão se não existir
+            // Create default profile if not exists
             const newUserProfile: any = {
                 id: firebaseUser.uid,
                 username: firebaseUser.email?.split('@')[0] || 'user',
